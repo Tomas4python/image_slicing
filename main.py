@@ -2,23 +2,41 @@ import os
 import numpy as np
 import tkinter as tk
 from PIL import Image, ImageTk
+from loguru import logger
+import sys
+import time
 
 
 class Settings:
     """Class to keep useful settings in one place"""
 
-    viewer_size = '1000x1000'  # The size of whole viewer window
-    resizable_width = False  # Default viewer window is constant size, set True if you want resize window with mouse
-    resizable_height = False
+    log_level = 'INFO'
+    viewer_size = '1000x1000'  # The size of whole picture viewer window (GUI)
+    resizable_width = False  # Default viewer window is constant size (False)
+    resizable_height = False  # Set True if you want resize window using mouse
     thumbnail_size = (320, 240)  # The thumbnails size of the original images at top row of the viewer
     image_size = (800, 600)  # The size of modified images in the middle of the viewer
-    colour_scheme = 'gray'  # Default colour scheme for third processing, available: 'gray', 'black', 'red', 'green',
-    # 'blue'
-    slice_count = 200  # Count of the slices is allowed from 20 to 200
+    colour_scheme = 'gray'  # Default colour scheme for images, available: 'gray', 'black', 'red', 'green', 'blue'
+    slice_count = 100  # Count of the slices is allowed from 20 to 200
     source_dir = 'images'  # Directory for original images
     temp_dir = 'temp'  # Directory for modified images, images are deleted when viewer is closed
 
 
+def log_decorator(func):
+    def wrapper(*args, **kwargs):
+        logger.debug(f"Entering '{func.__name__}' function with args: {args} and kwargs: {kwargs}")
+        start_time = time.time()
+        try:
+            result = func(*args, **kwargs)
+            logger.debug(f"Executed '{func.__name__}' successfully in {time.time() - start_time:.2f} seconds")
+            return result
+        except Exception as e:
+            logger.error(f"Exception occurred in '{func.__name__}': {e}")
+            raise e
+    return wrapper
+
+
+@log_decorator
 def scan_directory_for_images(directory: str) -> list[str]:
 
     supported_extensions = ('.jpg', '.jpeg', '.png', '.bmp')
@@ -74,7 +92,10 @@ def apply_color_scheme(image_array: np.ndarray) -> np.ndarray:
         return blue_only
 
     else:
-        raise ValueError("Unrecognized color scheme. Choose from 'gray', 'black', 'red', 'green', 'blue'.")
+        error_message = (f"Unrecognized color scheme '{settings.colour_scheme}'. Choose from 'gray', 'black', 'red', "
+                         f"'green', 'blue'.")
+        logger.error(error_message)
+        raise ValueError(error_message)
 
 
 def concatenate_arrays(arrays: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]) -> np.ndarray:
@@ -102,9 +123,12 @@ class ImageProcessor:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.cleanup_temp()
+        logger.info("Program exited")
 
     def process_images(self):
         idx = 1000
+        images = scan_directory_for_images(self.source_dir)
+        logger.info(f"Found {len(images)} images")
         for image_path in scan_directory_for_images(self.source_dir):
             image = Image.open(image_path)
             image_array = np.array(image)
@@ -121,14 +145,22 @@ class ImageProcessor:
             idx += 1
             concatenated_array = concatenate_arrays((original_array, black_and_white_array, vertically_array, horizontally_array))
             self.save_image(concatenated_array, os.path.basename(image_path), effect='full_concat', i=idx)
+        logger.success(f"{idx - 1000} images processed")
         viewer = ImageViewer(self.source_dir, self.temp_dir)
         viewer.mainloop()
 
     def save_image(self, image_array: np.ndarray, filename: str, effect: str, i: int) -> None:
-        base_filename = os.path.splitext(os.path.basename(filename))[0]
-        save_path = os.path.join(self.temp_dir, f"{i}_{effect}_{base_filename}.jpeg")
-        Image.fromarray(image_array).save(save_path)
+        try:
+            base_filename = os.path.splitext(os.path.basename(filename))[0]
+            save_path = os.path.join(self.temp_dir, f"{i}_{effect}_{base_filename}.jpeg")
+            Image.fromarray(image_array).save(save_path)
+            logger.debug(f"Image saved successfully at {save_path}")
 
+        except Exception as e:
+            # Log the exception with a descriptive message
+            logger.error(f"Failed to save image '{filename}' with effect '{effect}': {e}")
+
+    @log_decorator
     def cleanup_temp(self):
         for f in os.listdir(self.temp_dir):
             if f == '.gitignore':
@@ -136,7 +168,7 @@ class ImageProcessor:
             try:
                 os.remove(os.path.join(self.temp_dir, f))
             except Exception as e:
-                print(f"Error deleting file {f}: {e}")
+                logger.error(f"Error deleting file {f}: {e}")
 
 
 class ImageViewer(tk.Tk):
@@ -156,6 +188,7 @@ class ImageViewer(tk.Tk):
         self.create_thumbnail_bar()
         self.create_image_display()
         self.create_navigation_buttons()
+        logger.success("GUI launched")
 
     def create_thumbnail_bar(self):
         scroll_frame = tk.Frame(self)
@@ -217,11 +250,16 @@ class ImageViewer(tk.Tk):
 
 
 settings = Settings()
+# Set log level to INFO
+logger.remove()
+logger.add(sys.stderr, level=settings.log_level)
+logger.add("error.log", level="ERROR")
 
 
 def main():
     source_dir = settings.source_dir
     temp_dir = settings.temp_dir
+    logger.info(f"Program started")
     with ImageProcessor(source_dir, temp_dir) as processor:
         processor.process_images()
 
