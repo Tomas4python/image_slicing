@@ -5,14 +5,16 @@ from PIL import Image, ImageTk
 
 
 class Settings:
-    """Class to keep configurable settings in one place"""
+    """Class to keep useful settings in one place"""
 
-    viewer_size = '1200x1200'  # The size of whole viewer window
+    viewer_size = '1000x1000'  # The size of whole viewer window
     resizable_width = False  # Default viewer window is constant size, set True if you want resize window with mouse
     resizable_height = False
     thumbnail_size = (320, 240)  # The thumbnails size of the original images at top row of the viewer
-    image_size = (1200, 900)  # The size of modified images in the middle of the viewer
-    slice_count = 20  # Count of the slices is allowed from 20 to 50
+    image_size = (800, 600)  # The size of modified images in the middle of the viewer
+    colour_scheme = 'gray'  # Default colour scheme for third processing, available: 'gray', 'black', 'red', 'green',
+    # 'blue'
+    slice_count = 200  # Count of the slices is allowed from 20 to 200
     source_dir = 'images'  # Directory for original images
     temp_dir = 'temp'  # Directory for modified images, images are deleted when viewer is closed
 
@@ -24,8 +26,72 @@ def scan_directory_for_images(directory: str) -> list[str]:
             f.endswith(supported_extensions) and os.path.isfile(os.path.join(directory, f))]
 
 
+def slice_array_vertically(image_array: np.ndarray) -> np.ndarray:
+    """Slice image ndarray into a number of slices and rearrange them first even, then odd."""
+
+    slice_height = image_array.shape[0] // settings.slice_count
+    slices = [image_array[i*slice_height:(i+1)*slice_height, :] for i in range(settings.slice_count)]
+    rearranged_slices = slices[::2] + slices[1::2]
+    return np.vstack(rearranged_slices)
+
+
+def slice_array_horizontally(image_array: np.ndarray) -> np.ndarray:
+    """Slice image ndarray into a number of slices and rearrange them first even, then odd."""
+
+    slice_width = image_array.shape[1] // settings.slice_count
+    slices = [image_array[:, i*slice_width:(i+1)*slice_width] for i in range(settings.slice_count)]
+    rearranged_slices = slices[::2] + slices[1::2]
+    return np.hstack(rearranged_slices)
+
+
+def apply_color_scheme(image_array: np.ndarray) -> np.ndarray:
+    """Apply a color scheme to an image ndarray and return a 3D array according to the scheme choice."""
+
+    if settings.colour_scheme == 'gray':
+        grayscale = np.dot(image_array[..., :3], [0.2989, 0.5870, 0.1140])
+        return np.repeat(grayscale[:, :, np.newaxis], 3, axis=2).astype(np.uint8)
+
+    elif settings.colour_scheme == 'black':
+        grayscale = np.dot(image_array[..., :3], [0.2989, 0.5870, 0.1140])
+        black_and_white = grayscale > 115
+        black_and_white = (black_and_white * 255).astype(np.uint8)
+        return np.repeat(black_and_white[:, :, np.newaxis], 3, axis=2)
+
+    elif settings.colour_scheme == 'red':
+        red_only = image_array.copy()
+        red_only[:, :, 1:3] = 0
+        return red_only
+
+    elif settings.colour_scheme == 'green':
+        green_only = image_array.copy()
+        green_only[:, :, 0] = 0
+        green_only[:, :, 2] = 0
+        return green_only
+
+    elif settings.colour_scheme == 'blue':
+        blue_only = image_array.copy()
+        blue_only[:, :, 0:2] = 0
+        return blue_only
+
+    else:
+        raise ValueError("Unrecognized color scheme. Choose from 'gray', 'black', 'red', 'green', 'blue'.")
+
+
+def concatenate_arrays(arrays: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]) -> np.ndarray:
+    """Concatenate 1st with 2nd ndarray and 3rd with 4th array along axis 0, then concatenate these both along axis
+    1."""
+    # Shape arrays equal
+    min_height = min(image.shape[0] for image in arrays)
+    min_width = min(image.shape[1] for image in arrays)
+    images = [image[:min_height, :min_width] for image in arrays]
+    first_pair_concat = np.concatenate((images[0], images[1]), axis=0)
+    second_pair_concat = np.concatenate((images[2], images[3]), axis=0)
+    final_concat = np.concatenate((first_pair_concat, second_pair_concat), axis=1)
+    return final_concat
+
+
 class ImageProcessor:
-    """Class that does main job - slices images"""
+    """Class that organizes processing, saving and cleanup of images"""
 
     def __init__(self, source_dir: str, temp_dir: str):
         self.source_dir = source_dir
@@ -38,22 +104,35 @@ class ImageProcessor:
         self.cleanup_temp()
 
     def process_images(self):
-        for idx, image_path in enumerate(scan_directory_for_images(self.source_dir)):
+        idx = 1000
+        for image_path in scan_directory_for_images(self.source_dir):
             image = Image.open(image_path)
             image_array = np.array(image)
-            self.save_image(image_array, os.path.basename(image_path), vertical=True, i=idx)
-            self.save_image(image_array, os.path.basename(image_path), vertical=False, i=idx)
+            original_array = image_array.copy()
+            idx += 1
+            vertically_array = slice_array_vertically(image_array)
+            self.save_image(vertically_array, os.path.basename(image_path), effect='ver_slice', i=idx)
+            idx += 1
+            horizontally_array = slice_array_horizontally(vertically_array)
+            self.save_image(horizontally_array, os.path.basename(image_path), effect='hor_slice', i=idx)
+            idx += 1
+            black_and_white_array = apply_color_scheme(image_array)
+            self.save_image(black_and_white_array, os.path.basename(image_path), effect='color_scheme', i=idx)
+            idx += 1
+            concatenated_array = concatenate_arrays((original_array, black_and_white_array, vertically_array, horizontally_array))
+            self.save_image(concatenated_array, os.path.basename(image_path), effect='full_concat', i=idx)
         viewer = ImageViewer(self.source_dir, self.temp_dir)
         viewer.mainloop()
 
-    def save_image(self, image_array: np.ndarray, filename: str, vertical: bool, i: int) -> None:
-        orientation = 'first_cut' if vertical else 'second_cut'
+    def save_image(self, image_array: np.ndarray, filename: str, effect: str, i: int) -> None:
         base_filename = os.path.splitext(os.path.basename(filename))[0]
-        save_path = os.path.join(self.temp_dir, f"{i}_{orientation}_{base_filename}.jpeg")
+        save_path = os.path.join(self.temp_dir, f"{i}_{effect}_{base_filename}.jpeg")
         Image.fromarray(image_array).save(save_path)
 
     def cleanup_temp(self):
         for f in os.listdir(self.temp_dir):
+            if f == '.gitignore':
+                continue
             try:
                 os.remove(os.path.join(self.temp_dir, f))
             except Exception as e:
