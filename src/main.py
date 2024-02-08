@@ -10,7 +10,6 @@ import time
 class Settings:
     """Class to keep useful settings in one place"""
 
-    log_level = 'INFO'
     viewer_size = '1000x1000'  # The size of whole picture viewer window (GUI)
     resizable_width = False  # Default viewer window is constant size (False)
     resizable_height = False  # Set True if you want resize window using mouse
@@ -18,11 +17,16 @@ class Settings:
     image_size = (800, 600)  # The size of modified images in the middle of the viewer
     colour_scheme = 'gray'  # Default colour scheme for images, available: 'gray', 'black', 'red', 'green', 'blue'
     slice_count = 100  # Count of the slices is allowed from 20 to 200
-    source_dir = 'images'  # Directory for original images
-    temp_dir = 'temp'  # Directory for modified images, images are deleted when viewer is closed
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    source_dir = os.path.join(project_root, 'images')  # Directory for original images
+    temp_dir = os.path.join(project_root, 'temp')  # Directory for modified images
+    # Logger settings
+    log_level = 'INFO'
+    log_file_path = os.path.join(project_root, 'logs', 'error.log')
 
 
 def log_decorator(func):
+    """Use for function debugging"""
     def wrapper(*args, **kwargs):
         logger.debug(f"Entering '{func.__name__}' function with args: {args} and kwargs: {kwargs}")
         start_time = time.time()
@@ -47,8 +51,8 @@ def scan_directory_for_images(directory: str) -> list[str]:
 def slice_array_vertically(image_array: np.ndarray) -> np.ndarray:
     """Slice image ndarray into a number of slices and rearrange them first even, then odd."""
 
-    slice_height = image_array.shape[0] // settings.slice_count
-    slices = [image_array[i*slice_height:(i+1)*slice_height, :] for i in range(settings.slice_count)]
+    slice_height = image_array.shape[0] // Settings.slice_count
+    slices = [image_array[i*slice_height:(i+1)*slice_height, :] for i in range(Settings.slice_count)]
     rearranged_slices = slices[::2] + slices[1::2]
     return np.vstack(rearranged_slices)
 
@@ -56,8 +60,8 @@ def slice_array_vertically(image_array: np.ndarray) -> np.ndarray:
 def slice_array_horizontally(image_array: np.ndarray) -> np.ndarray:
     """Slice image ndarray into a number of slices and rearrange them first even, then odd."""
 
-    slice_width = image_array.shape[1] // settings.slice_count
-    slices = [image_array[:, i*slice_width:(i+1)*slice_width] for i in range(settings.slice_count)]
+    slice_width = image_array.shape[1] // Settings.slice_count
+    slices = [image_array[:, i*slice_width:(i+1)*slice_width] for i in range(Settings.slice_count)]
     rearranged_slices = slices[::2] + slices[1::2]
     return np.hstack(rearranged_slices)
 
@@ -65,34 +69,34 @@ def slice_array_horizontally(image_array: np.ndarray) -> np.ndarray:
 def apply_color_scheme(image_array: np.ndarray) -> np.ndarray:
     """Apply a color scheme to an image ndarray and return a 3D array according to the scheme choice."""
 
-    if settings.colour_scheme == 'gray':
+    if Settings.colour_scheme == 'gray':
         grayscale = np.dot(image_array[..., :3], [0.2989, 0.5870, 0.1140])
         return np.repeat(grayscale[:, :, np.newaxis], 3, axis=2).astype(np.uint8)
 
-    elif settings.colour_scheme == 'black':
+    elif Settings.colour_scheme == 'black':
         grayscale = np.dot(image_array[..., :3], [0.2989, 0.5870, 0.1140])
         black_and_white = grayscale > 115
         black_and_white = (black_and_white * 255).astype(np.uint8)
         return np.repeat(black_and_white[:, :, np.newaxis], 3, axis=2)
 
-    elif settings.colour_scheme == 'red':
+    elif Settings.colour_scheme == 'red':
         red_only = image_array.copy()
         red_only[:, :, 1:3] = 0
         return red_only
 
-    elif settings.colour_scheme == 'green':
+    elif Settings.colour_scheme == 'green':
         green_only = image_array.copy()
         green_only[:, :, 0] = 0
         green_only[:, :, 2] = 0
         return green_only
 
-    elif settings.colour_scheme == 'blue':
+    elif Settings.colour_scheme == 'blue':
         blue_only = image_array.copy()
         blue_only[:, :, 0:2] = 0
         return blue_only
 
     else:
-        error_message = (f"Unrecognized color scheme '{settings.colour_scheme}'. Choose from 'gray', 'black', 'red', "
+        error_message = (f"Unrecognized color scheme '{Settings.colour_scheme}'. Choose from 'gray', 'black', 'red', "
                          f"'green', 'blue'.")
         logger.error(error_message)
         raise ValueError(error_message)
@@ -157,7 +161,6 @@ class ImageProcessor:
             logger.debug(f"Image saved successfully at {save_path}")
 
         except Exception as e:
-            # Log the exception with a descriptive message
             logger.error(f"Failed to save image '{filename}' with effect '{effect}': {e}")
 
     @log_decorator
@@ -182,8 +185,8 @@ class ImageViewer(tk.Tk):
         self.current_image_index = 0
 
         self.title("Image Slicer")
-        self.geometry(settings.viewer_size)
-        self.resizable(settings.resizable_width, settings.resizable_height)
+        self.geometry(Settings.viewer_size)
+        self.resizable(Settings.resizable_width, Settings.resizable_height)
 
         self.create_thumbnail_bar()
         self.create_image_display()
@@ -193,7 +196,7 @@ class ImageViewer(tk.Tk):
     def create_thumbnail_bar(self):
         scroll_frame = tk.Frame(self)
         scroll_frame.pack(side=tk.TOP, fill=tk.X, expand=True)
-        canvas = tk.Canvas(scroll_frame, height=settings.thumbnail_size[1] + 20)
+        canvas = tk.Canvas(scroll_frame, height=Settings.thumbnail_size[1] + 20)
         scrollbar = tk.Scrollbar(scroll_frame, orient="horizontal", command=canvas.xview)
         canvas.configure(xscrollcommand=scrollbar.set)
         scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
@@ -207,15 +210,15 @@ class ImageViewer(tk.Tk):
         x_pos = 5
         for image_file in scan_directory_for_images(self.images_dir):
             img = Image.open(image_file)
-            img.thumbnail(settings.thumbnail_size)
+            img.thumbnail(Settings.thumbnail_size)
             photo_img = ImageTk.PhotoImage(img)
             label = tk.Label(thumbnails_frame, image=photo_img,
                              bg='black')
             label.image = photo_img
             label.place(x=x_pos, y=5)
-            x_pos += settings.thumbnail_size[0] + 10
-        thumbnails_frame.config(width=x_pos, height=settings.thumbnail_size[1] + 20)
-        canvas.configure(scrollregion=(0, 0, x_pos, settings.thumbnail_size[1] + 20))
+            x_pos += Settings.thumbnail_size[0] + 10
+        thumbnails_frame.config(width=x_pos, height=Settings.thumbnail_size[1] + 20)
+        canvas.configure(scrollregion=(0, 0, x_pos, Settings.thumbnail_size[1] + 20))
 
     def create_image_display(self):
         self.image_panel = tk.Label(self)
@@ -225,7 +228,7 @@ class ImageViewer(tk.Tk):
     def update_image_display(self):
         if self.temp_images:
             img = Image.open(self.temp_images[self.current_image_index])
-            img.thumbnail((settings.image_size[0], settings.image_size[1]), Image.Resampling.LANCZOS)
+            img.thumbnail((Settings.image_size[0], Settings.image_size[1]), Image.Resampling.LANCZOS)
             photo_img = ImageTk.PhotoImage(img)
             self.image_panel.configure(image=photo_img)
             self.image_panel.image = photo_img
@@ -249,16 +252,15 @@ class ImageViewer(tk.Tk):
         self.update_image_display()
 
 
-settings = Settings()
-# Set log level to INFO
+# Set log level and log file
 logger.remove()
-logger.add(sys.stderr, level=settings.log_level)
-logger.add("error.log", level="ERROR")
+logger.add(sys.stderr, level=Settings.log_level)
+logger.add(Settings.log_file_path, level="ERROR")
 
 
 def main():
-    source_dir = settings.source_dir
-    temp_dir = settings.temp_dir
+    source_dir = Settings.source_dir
+    temp_dir = Settings.temp_dir
     logger.info(f"Program started")
     with ImageProcessor(source_dir, temp_dir) as processor:
         processor.process_images()
