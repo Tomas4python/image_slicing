@@ -5,6 +5,7 @@ from PIL import Image, ImageTk
 from loguru import logger
 import sys
 import time
+import random
 
 
 class Settings:
@@ -115,6 +116,13 @@ def concatenate_arrays(arrays: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndar
     return final_concat
 
 
+def rotate_array(image_array: np.ndarray) -> np.ndarray:
+    """Rotate an image ndarray by a multiple of 90 degrees, chosen randomly."""
+
+    rotated_image = np.rot90(image_array, k=random.choice([1, 2, 3]))
+    return rotated_image
+
+
 class ImageProcessor:
     """Class that organizes processing, saving and cleanup of images"""
 
@@ -136,6 +144,15 @@ class ImageProcessor:
         for image_path in scan_directory_for_images(self.source_dir):
             image = Image.open(image_path)
             image_array = np.array(image)
+            # Skip screenshot for readme file
+            if os.path.basename(image_path) == "screenshot.png":
+                continue
+            # Skip images with resolution less than 640x480
+            if image_array.shape[0] < 480 or image_array.shape[1] < 640:
+                logger.warning(f"Image {os.path.basename(image_path)} skipped due to resolution less than 640x480.")
+                continue
+            # Drop alpha channel if image comes with RGBA
+            image_array = image_array[:, :, :3]
             original_array = image_array.copy()
             idx += 1
             vertically_array = slice_array_vertically(image_array)
@@ -144,11 +161,15 @@ class ImageProcessor:
             horizontally_array = slice_array_horizontally(vertically_array)
             self.save_image(horizontally_array, os.path.basename(image_path), effect='hor_slice', i=idx)
             idx += 1
-            black_and_white_array = apply_color_scheme(image_array)
-            self.save_image(black_and_white_array, os.path.basename(image_path), effect='color_scheme', i=idx)
+            color_scheme_array = apply_color_scheme(image_array)
+            self.save_image(color_scheme_array, os.path.basename(image_path), effect='color_scheme', i=idx)
             idx += 1
-            concatenated_array = concatenate_arrays((original_array, black_and_white_array, vertically_array, horizontally_array))
+            concatenated_array = concatenate_arrays((original_array, color_scheme_array,
+                                                     vertically_array, horizontally_array))
             self.save_image(concatenated_array, os.path.basename(image_path), effect='full_concat', i=idx)
+            idx += 1
+            rotated_array = rotate_array(original_array)
+            self.save_image(rotated_array, os.path.basename(image_path), effect='rotated', i=idx)
         logger.success(f"{idx - 1000} images processed")
         viewer = ImageViewer(self.source_dir, self.temp_dir)
         viewer.mainloop()
@@ -209,6 +230,9 @@ class ImageViewer(tk.Tk):
     def load_thumbnails(self, thumbnails_frame, canvas):
         x_pos = 5
         for image_file in scan_directory_for_images(self.images_dir):
+            # Skip screenshot image
+            if os.path.basename(image_file) == "screenshot.png":
+                continue
             img = Image.open(image_file)
             img.thumbnail(Settings.thumbnail_size)
             photo_img = ImageTk.PhotoImage(img)
@@ -257,12 +281,32 @@ logger.remove()
 logger.add(sys.stderr, level=Settings.log_level)
 logger.add(Settings.log_file_path, level="ERROR")
 
+# Check if arguments where provided in command line and handle them
+num_args = len(sys.argv) - 1
+if num_args > 2:
+    logger.error("Too many arguments provided. Only the first two will be considered.")
+for arg in sys.argv[1:3]:
+    if arg.isdigit():
+        slice_count = int(arg)
+        if 20 <= slice_count <= 200:
+            Settings.slice_count = slice_count
+            logger.success(f"slice_count set to {slice_count}")
+        else:
+            logger.error("slice_count argument must be between 20 and 200")
+    elif arg in ['gray', 'red', 'green', 'blue']:
+        Settings.colour_scheme = arg
+        logger.success(f"colour_scheme set to {arg}")
+    else:
+        logger.error(f"Unrecognized argument: {arg}")
+
+# Set restrictions to slice count
+Settings.slice_count = max(20, min(Settings.slice_count, 200))
+
 
 def main():
-    source_dir = Settings.source_dir
-    temp_dir = Settings.temp_dir
+
     logger.info(f"Program started")
-    with ImageProcessor(source_dir, temp_dir) as processor:
+    with ImageProcessor(Settings.source_dir, Settings.temp_dir) as processor:
         processor.process_images()
 
 
