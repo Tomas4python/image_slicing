@@ -2,6 +2,3 @@
 2024-02-08 17:11:33.989 | ERROR    | __main__:<module>:263 - Too many arguments provided. Only the first two will be considered.
 2024-02-08 17:12:23.772 | ERROR    | __main__:<module>:271 - slice_count argument must be between 20 and 200
 2024-02-09 09:33:28.555 | ERROR    | __main__:save_image:169 - Failed to save image 'screenshot.png' with effect 'ver_slice': cannot write mode RGBA as JPEG
-2024-02-09 09:33:28.559 | ERROR    | __main__:save_image:169 - Failed to save image 'screenshot.png' with effect 'hor_slice': cannot write mode RGBA as JPEG
-2024-02-09 09:33:28.567 | ERROR    | __main__:save_image:169 - Failed to save image 'screenshot.png' with effect 'color_scheme': cannot write mode RGBA as JPEG
-2024-02-09 09:33:28.579 | ERROR    | __main__:save_image:169 - Failed to save image 'screenshot.png' with effect 'full_concat': cannot write mode RGBA as JPEG

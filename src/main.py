@@ -123,6 +123,35 @@ def rotate_array(image_array: np.ndarray) -> np.ndarray:
     return rotated_image
 
 
+def blur_array(image_array: np.ndarray, iterations: int = 1) -> np.ndarray:
+    kernel = np.array([
+        [1,  2,  3,  4,  5,  4,  3,  2, 1],
+        [2,  4,  6,  8, 10,  8,  6,  4, 2],
+        [3,  6,  9, 12, 15, 12,  9,  6, 3],
+        [4,  8, 12, 16, 20, 16, 12,  8, 4],
+        [5, 10, 15, 20, 25, 20, 15, 10, 5],
+        [4,  8, 12, 16, 20, 16, 12,  8, 4],
+        [3,  6,  9, 12, 15, 12,  9,  6, 3],
+        [2,  4,  6,  8, 10,  8,  6,  4, 2],
+        [1,  2,  3,  4,  5,  4,  3,  2, 1]
+    ], dtype=np.float32)
+    kernel /= kernel.sum()
+    for _ in range(iterations):
+        array_list = []
+        for y in range(kernel.shape[0]):
+            temp_array = np.roll(image_array, shift=y - kernel.shape[0] // 2, axis=0)
+            for x in range(kernel.shape[1]):
+                temp_array_x = np.roll(temp_array, shift=x - kernel.shape[1] // 2, axis=1)
+                weighted_temp_array_x = temp_array_x * kernel[y, x]
+                array_list.append(weighted_temp_array_x)
+
+        array_list = np.array(array_list)
+        image_array = np.sum(array_list, axis=0)
+        image_array = np.clip(image_array, 0, 255).astype(np.uint8)
+
+    return image_array
+
+
 class ImageProcessor:
     """Class that organizes processing, saving and cleanup of images"""
 
@@ -140,8 +169,10 @@ class ImageProcessor:
     def process_images(self):
         idx = 1000
         images = scan_directory_for_images(self.source_dir)
-        logger.info(f"Found {len(images)} images")
-        for image_path in scan_directory_for_images(self.source_dir):
+        screenshot_present = 'screenshot.png' in [os.path.basename(image) for image in images]
+        image_count = len(images) - screenshot_present
+        logger.info(f"Found {image_count} images")
+        for i, image_path in enumerate(scan_directory_for_images(self.source_dir)):
             image = Image.open(image_path)
             image_array = np.array(image)
             # Skip screenshot for readme file
@@ -168,9 +199,13 @@ class ImageProcessor:
                                                      vertically_array, horizontally_array))
             self.save_image(concatenated_array, os.path.basename(image_path), effect='full_concat', i=idx)
             idx += 1
+            blured_array = blur_array(original_array)
+            self.save_image(blured_array, os.path.basename(image_path), effect='blurred', i=idx)
+            idx += 1
             rotated_array = rotate_array(original_array)
             self.save_image(rotated_array, os.path.basename(image_path), effect='rotated', i=idx)
-        logger.success(f"{idx - 1000} images processed")
+            logger.success(f"Image No {i + 1} processed")
+        logger.success(f"{idx - 1000} images saved")
         viewer = ImageViewer(self.source_dir, self.temp_dir)
         viewer.mainloop()
 
@@ -251,11 +286,18 @@ class ImageViewer(tk.Tk):
 
     def update_image_display(self):
         if self.temp_images:
-            img = Image.open(self.temp_images[self.current_image_index])
+            img_path = self.temp_images[self.current_image_index]
+            img = Image.open(img_path)
             img.thumbnail((Settings.image_size[0], Settings.image_size[1]), Image.Resampling.LANCZOS)
             photo_img = ImageTk.PhotoImage(img)
             self.image_panel.configure(image=photo_img)
             self.image_panel.image = photo_img
+            file_name = os.path.basename(img_path)
+            if hasattr(self, 'file_name_label'):
+                self.file_name_label.configure(text=file_name)
+            else:
+                self.file_name_label = tk.Label(self, text=file_name)
+                self.file_name_label.pack(side=tk.TOP)
 
     def create_navigation_buttons(self):
         buttons_frame = tk.Frame(self)

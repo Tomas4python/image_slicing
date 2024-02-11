@@ -5,7 +5,7 @@ Python programming, with a particular focus on leveraging the NumPy library. The
 processes images stored in a designated 'images' directory, supporting formats such as .jpg,
 .jpeg, .png, and .bmp.
 
-The core functionality involves applying four distinct processing techniques to each image,
+The core functionality involves applying five distinct processing techniques to each image,
 showcasing the versatility and power of NumPy arrays in image manipulation. These processed
 images are then displayed in simple user-friendly GUI built using tkinter, offering a
 straightforward and interactive way to view the results. The application's architecture
@@ -15,7 +15,7 @@ processing methods without significant restructuring.
 ## Key Features:
 - **Image Support:** Handles multiple image formats including .jpg, .jpeg, .png, and .bmp.
 - **NumPy Integration:** Utilizes NumPy for efficient image processing and manipulation.
-- **Multiple Processing Techniques:** Applies four different processing techniques to each
+- **Multiple Processing Techniques:** Applies five different processing techniques to each
 image, demonstrating various aspects of image manipulation.
 - **Expandable Structure:** Designed with scalability in mind, making it simple to introduce
 additional processing methods.
@@ -35,6 +35,7 @@ using vstack and hstack.
 ### Additional Features:
 
 - **Color Filters:** Converts RGB images to grayscale, red, green, or blue using NumPy.
+- **Blur Filter:** Applies custom kernel to blur images.
 - **RGBA Handling:** Removes the alpha channel from RGBA images to ensure compatibility
 with formats like JPEG.
 - **Testing:** Includes NumPy-based sample tests to validate image processing functions.
@@ -60,7 +61,7 @@ and extract it into for project created new folder or alternatively if you are G
 1. Set Up a Virtual Environment:
    - It's recommended to use a virtual environment to avoid conflicts with
    other Python projects or system-wide packages.
-   - Navigate to the project folder.
+   - Navigate to the project folder **\\image_slicing**.
    - Create a new virtual environment named 'venv' in the project directory by running the script:
 
    ```
